@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Délégation Ollama</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: light-dark(#171a20, #f1f3f6);
+      --muted: light-dark(#555d6a, #a8afba);
+      --border: light-dark(#dfe3e9, #383d46);
+      --surface: light-dark(#f6f8fb, #23262d);
+      --green: light-dark(#176a48, #8fe3b6);
+      --green-bg: light-dark(#e5f5ed, #183a2c);
+      --accepted-surface: light-dark(#edf5f0, #26342e);
+      --accepted-border: light-dark(#cadfd2, #3a5146);
+      --red: light-dark(#8a323c, #f1a8ae);
+      --rejected-surface: light-dark(#faeef0, #39292d);
+      --rejected-border: light-dark(#e9cbd0, #563d43);
+      --amber: light-dark(#755013, #f7d593);
+      --amber-bg: light-dark(#fcf0d6, #422f14);
+      font: 14px/1.4 system-ui, sans-serif;
+    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { color: var(--text); margin: 0; padding: clamp(14px, 4vw, 24px); }
+    main { max-width: 520px; margin-inline: auto; }
+    header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    h1 { font-size: 17px; font-weight: 650; letter-spacing: -.02em; margin: 0; }
+    #mode {
+      display: inline-flex; align-items: center; gap: 6px; border-radius: 99px;
+      padding: 4px 9px; background: var(--surface); color: var(--muted);
+      font-size: 12px; font-weight: 600;
+    }
+    #mode::before { content: ""; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
+    #mode[data-mode="auto"] { color: var(--green); background: var(--green-bg); }
+    #mode[data-mode="manual"] { color: var(--amber); background: var(--amber-bg); }
+    dl { margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    dl > div { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+    dt, .metric-note, #notice { font-size: 12px; color: var(--muted); }
+    dd { margin: 3px 0 0; font-size: 25px; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .metric-note { display: block; margin-top: 2px; font-weight: 400; }
+    .metric-note[hidden] { display: none; }
+    #review-summary { margin: 10px 0 0; }
+    #notice { margin: 9px 0 0; color: var(--amber); }
+    #activity { margin-top: 19px; }
+    #activity-title { margin: 0; font-size: 14px; font-weight: 650; }
+    #request-list { display: grid; gap: 7px; margin: 8px 0 0; padding: 0; list-style: none; }
+    .request {
+      min-width: 0; border: 1px solid var(--border); border-radius: 9px;
+      background: var(--surface); padding: 8px 10px;
+    }
+    .request[data-verdict="accepted"] { background: var(--accepted-surface); border-color: var(--accepted-border); }
+    .request[data-verdict="rejected"] { background: var(--rejected-surface); border-color: var(--rejected-border); }
+    .request-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; }
+    .request-title { flex: 1 1 95px; min-width: 0; font-size: 13px; font-weight: 600; }
+    .request-title, .request-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .request-status { font-size: 11px; font-weight: 600; color: var(--muted); }
+    .request-status[title] { cursor: help; }
+    .request[data-verdict="accepted"] .request-status { color: var(--green); }
+    .request[data-verdict="rejected"] .request-status { color: var(--red); }
+    .request-preview, .request-metrics { color: var(--muted); font-size: 11px; }
+    .request-preview { margin: 2px 0 0; }
+    .request-metrics { margin: 3px 0 0; font-variant-numeric: tabular-nums; }
+    @media (max-width: 255px) { dl { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Délégation Ollama</h1>
+      <span id="mode" role="status">Chargement</span>
+    </header>
+    <dl aria-label="Compteurs de ce chat">
+      <div><dt>Requêtes locales</dt><dd id="requests">—</dd></div>
+      <div>
+        <dt>Tokens traités</dt>
+        <dd><span id="tokens">—</span><small class="metric-note" id="details" hidden></small></dd>
+      </div>
+      <div><dt>Réponses acceptées</dt><dd id="accepted">—</dd></div>
+      <div><dt>Réponses rejetées</dt><dd id="rejected">—</dd></div>
+      <div>
+        <dt>Débit moyen</dt>
+        <dd><span id="rate">—</span><small class="metric-note">tokens générés/min</small></dd>
+      </div>
+      <div>
+        <dt title="Estimation après la dernière réponse, sur la fenêtre demandée">Contexte récent</dt>
+        <dd><span id="context-fill">—</span><small class="metric-note" id="context-details">Après la réponse</small></dd>
+      </div>
+    </dl>
+    <p class="metric-note" id="review-summary" hidden></p>
+    <p id="notice" role="status" hidden></p>
+    <section id="activity" aria-labelledby="activity-title" hidden>
+      <h2 id="activity-title">Dernières requêtes</h2>
+      <p class="metric-note" id="empty-activity" hidden>Aucune requête envoyée dans ce chat.</p>
+      <ol id="request-list"></ol>
+    </section>
+  </main>
+  <script>
+    const labels = { auto: 'Activée', manual: 'À la demande', off: 'En pause' };
+    const number = new Intl.NumberFormat('fr-FR');
+    const percent = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 1 });
+    const seconds = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+    const clock = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const requestStatuses = {
+      running: 'En cours', awaiting_review: 'À examiner', needs_context: 'Contexte demandé',
+      failed: 'Échec', cancelled: 'Annulée', interrupted: 'Interrompue'
+    };
+    const mode = document.getElementById('mode');
+    const requests = document.getElementById('requests');
+    const tokens = document.getElementById('tokens');
+    const accepted = document.getElementById('accepted');
+    const rejected = document.getElementById('rejected');
+    const rate = document.getElementById('rate');
+    const contextFill = document.getElementById('context-fill');
+    const contextDetails = document.getElementById('context-details');
+    const reviewSummary = document.getElementById('review-summary');
+    const details = document.getElementById('details');
+    const notice = document.getElementById('notice');
+    const activity = document.getElementById('activity');
+    const emptyActivity = document.getElementById('empty-activity');
+    const requestList = document.getElementById('request-list');
+    let lastRequests;
+    const pending = new Map();
+    let sequence = 0;
+    let hostOrigin = '*';
+    let snapshotVisible = false;
+    let refreshTimer;
+    let refreshInProgress = false;
+    let bridgeReady = false;
+
+    function report(message) {
+      notice.textContent = message;
+      notice.hidden = !message;
+      if (message && !snapshotVisible) mode.textContent = 'Indisponible';
+    }
+
+    function requestElement(tag, className, text) {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = text;
+      return node;
+    }
+
+    function formatDuration(ms) {
+      if (!Number.isFinite(ms)) return '—';
+      if (ms < 1000) return `${number.format(ms)} ms`;
+      if (ms < 60000) return `${seconds.format(ms / 1000)} s`;
+      const elapsed = Math.floor(ms / 1000);
+      return `${number.format(Math.floor(elapsed / 60))} min ${number.format(elapsed % 60)} s`;
+    }
+
+    function renderRequests(rows) {
+      if (!Array.isArray(rows)) return;
+      const key = JSON.stringify(rows);
+      if (key === lastRequests) return;
+      lastRequests = key;
+      const items = rows.map(row => {
+        const item = requestElement('li', 'request', '');
+        const head = requestElement('div', 'request-head', '');
+        const title = requestElement('strong', 'request-title', row.title);
+        title.title = row.title;
+        let status = Object.hasOwn(requestStatuses, row.status) ? requestStatuses[row.status] : 'En attente';
+        if (row.verdict === 'accepted' || row.verdict === 'rejected') {
+          item.dataset.verdict = row.verdict;
+          status = row.verdict === 'accepted' ? 'Acceptée' : 'Rejetée';
+        }
+        const badge = requestElement('span', 'request-status', status);
+        if (row.verdict === 'rejected' && row.rejectionReason) badge.title = row.rejectionReason;
+        head.append(title, badge);
+        item.append(head);
+        if (row.preview && row.preview !== row.title) {
+          const preview = requestElement('p', 'request-preview', row.preview);
+          preview.title = row.preview;
+          item.append(preview);
+        }
+        const startedAt = Date.parse(row.startedAt);
+        const startTime = Number.isFinite(startedAt) ? clock.format(startedAt) : '—';
+        const inputTokens = Number.isFinite(row.inputTokens) ? number.format(row.inputTokens) : '—';
+        const outputTokens = Number.isFinite(row.outputTokens) ? number.format(row.outputTokens) : '—';
+        const metrics = requestElement('p', 'request-metrics', `Début ${startTime} · ${formatDuration(row.durationMs)}`);
+        metrics.append(document.createElement('br'), `${inputTokens} tokens en entrée · ${outputTokens} en sortie`);
+        item.append(metrics);
+        return item;
+      });
+      requestList.replaceChildren(...items);
+      emptyActivity.hidden = rows.length > 0;
+      activity.hidden = false;
+    }
+
+    function render(result) {
+      if (result?.isError) throw new Error(result.content?.[0]?.text || 'Compteurs indisponibles.');
+      const data = result?.structuredContent ?? result;
+      const { localRequests, localInputTokens, localOutputTokens } = data || {};
+      if (!Object.hasOwn(labels, data?.mode) || ![localRequests, localInputTokens, localOutputTokens]
+          .every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('Compteurs indisponibles.');
+      mode.dataset.mode = data.mode;
+      mode.textContent = labels[data.mode];
+      requests.textContent = number.format(localRequests);
+      tokens.textContent = number.format(localInputTokens + localOutputTokens);
+      accepted.textContent = Number.isSafeInteger(data.acceptedResponses) ? number.format(data.acceptedResponses) : '—';
+      rejected.textContent = Number.isSafeInteger(data.rejectedResponses) ? number.format(data.rejectedResponses) : '—';
+      if (Number.isSafeInteger(data.awaitingReview) && Number.isSafeInteger(data.needsContextResponses)) {
+        const contextLabel = data.needsContextResponses === 1 ? 'demande de contexte' : 'demandes de contexte';
+        reviewSummary.textContent = `${number.format(data.awaitingReview)} à examiner · ${number.format(data.needsContextResponses)} ${contextLabel}`;
+        reviewSummary.hidden = false;
+      }
+      rate.textContent = Number.isFinite(data.generationTokensPerMinute) ? number.format(Math.round(data.generationTokensPerMinute)) : '—';
+      const context = data.lastContext;
+      contextFill.textContent = Number.isFinite(context?.fillPercent) ? percent.format(context.fillPercent / 100) : '—';
+      contextDetails.textContent = Number.isFinite(context?.fillPercent)
+        ? `${number.format(context.measuredTokens)} / ${number.format(context.requestedTokens)} tokens`
+        : 'Après la réponse';
+      details.textContent = `${number.format(localInputTokens)} en entrée · ${number.format(localOutputTokens)} en sortie`;
+      details.hidden = false;
+      renderRequests(data.recentRequests);
+      snapshotVisible = true;
+      report('');
+    }
+
+    function post(message) {
+      window.parent.postMessage({ jsonrpc: '2.0', ...message }, hostOrigin);
+    }
+
+    function call(method, params) {
+      return new Promise((resolve, reject) => {
+        const id = ++sequence;
+        const timeout = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error('Connexion au panneau indisponible.'));
+        }, 7000);
+        pending.set(id, { resolve, reject, timeout });
+        post({ id, method, params });
+      });
+    }
+
+    function applyTheme(context) {
+      if (context?.theme === 'light' || context?.theme === 'dark') document.documentElement.dataset.theme = context.theme;
+    }
+
+    window.addEventListener('message', event => {
+      if (event.source !== window.parent || (hostOrigin !== '*' && event.origin !== hostOrigin)) return;
+      const message = event.data;
+      if (message?.jsonrpc !== '2.0') return;
+      if (pending.has(message.id) && !message.method) {
+        const { resolve, reject, timeout } = pending.get(message.id);
+        pending.delete(message.id);
+        clearTimeout(timeout);
+        if (event.origin !== 'null' && event.origin) hostOrigin = event.origin;
+        if (message.error) reject(new Error(message.error.message));
+        else resolve(message.result);
+      } else if (message.method === 'ui/notifications/tool-result') {
+        try { render(message.params); } catch (error) { report(error.message); }
+      } else if (message.method === 'ui/notifications/host-context-changed') {
+        applyTheme(message.params);
+      }
+    });
+
+    async function refresh() {
+      if (refreshInProgress || document.hidden) return;
+      refreshInProgress = true;
+      try {
+        const result = bridgeReady
+          ? await call('tools/call', { name: 'local_status_snapshot', arguments: {} })
+          : await window.openai.callTool('local_status_snapshot', {});
+        render(result);
+      } catch {
+        report(snapshotVisible ? 'Actualisation interrompue. Dernières valeurs reçues.' : 'Compteurs indisponibles.');
+      } finally {
+        refreshInProgress = false;
+      }
+    }
+
+    async function connect() {
+      if (window.openai?.toolOutput) {
+        try { render(window.openai.toolOutput); } catch (error) { report(error.message); }
+      }
+      try {
+        const init = await call('ui/initialize', {
+          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.7' }, appCapabilities: {}
+        });
+        bridgeReady = true;
+        applyTheme(init.hostContext);
+        post({ method: 'ui/notifications/initialized', params: {} });
+      } catch {
+        if (typeof window.openai?.callTool !== 'function') {
+          report(snapshotVisible ? 'Dernières valeurs reçues.' : 'Panneau à ouvrir dans Codex.');
+          return;
+        }
+      }
+      if (!snapshotVisible) await refresh();
+      refreshTimer = setInterval(refresh, 3000);
+      document.addEventListener('visibilitychange', refresh);
+      window.addEventListener('pagehide', () => clearInterval(refreshTimer), { once: true });
+    }
+
+    connect();
+  </script>
+</body>
+</html>

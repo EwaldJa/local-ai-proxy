@@ -1,0 +1,9 @@
+{
+  "name": "local-ai-proxy",
+  "version": "0.3.7",
+  "description": "Use your own Ollama models for bounded text, file and data work under Codex supervision.",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "requires_local_executor": true,
+  "interface": { "displayName": "Local AI Proxy" }
+}

@@ -1,0 +1,23 @@
+{
+  "workspace": ".",
+  "ollama": {
+    "url": "http://127.0.0.1:11434",
+    "allowInsecureLanHttp": false,
+    "timeoutMs": 300000,
+    "tokenEnv": null
+  },
+  "delegation": { "defaultMode": "manual", "workspaceFiles": true },
+  "models": {
+    "default": null,
+    "byTask": {},
+    "profiles": {}
+  },
+  "limits": {
+    "contextTokens": 8192,
+    "outputTokens": 2048,
+    "contextMarginTokens": 512,
+    "maxFileBytes": 1048576,
+    "maxResponseBytes": 4194304
+  },
+  "git": { "branchPerChat": false, "commits": "manual" }
+}

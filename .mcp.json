@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "local-ai-proxy": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/src/mcp.js"],
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}

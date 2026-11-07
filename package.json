@@ -1,0 +1,21 @@
+{
+  "name": "local-ai-proxy",
+  "version": "0.3.7",
+  "private": true,
+  "author": { "name": "Ewald Janin", "email": "ewald.janin@gmail.com" },
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "description": "Delegate bounded text, file and data tasks from Codex to Ollama.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/mcp.js",
+    "test": "node --test --test-concurrency=1",
+    "doctor": "node src/cli.js doctor",
+    "stats": "node src/cli.js stats"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "ajv": "8.20.0",
+    "zod": "4.6.7"
+  }
+}

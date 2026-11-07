@@ -1,0 +1,8 @@
+{
+  "chatId": "demo-presales",
+  "goal": "Extraire les exigences d'un brief et vérifier leur provenance.",
+  "steps": [
+    { "id": "extract", "title": "Extraire les exigences en JSON", "executor": "local", "taskType": "extraction", "weight": 3 },
+    { "id": "review", "title": "Vérifier le résultat contre le brief", "executor": "codex", "taskType": "review", "weight": 1 }
+  ]
+}

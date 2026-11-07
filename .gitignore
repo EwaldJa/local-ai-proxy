@@ -1,0 +1,9 @@
+node_modules/
+.pnpm-store/
+.local-ai/
+local-ai.config.json
+local-ai.config.json.tmp
+.local-ai-write-*
+.env
+.env.*
+*.log

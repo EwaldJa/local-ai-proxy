@@ -1,0 +1,13 @@
+{
+  "chatId": "demo-presales",
+  "stepId": "extract",
+  "instruction": "Extrais les exigences explicites du brief. Renvoie dans text un JSON avec la clé requirements, tableau de chaînes. N'ajoute rien qui ne soit dans le brief. Aucun changement de fichier.",
+  "context": "Brief source : le client demande une connexion SSO et un export CSV. Le budget et le calendrier ne sont pas précisés.",
+  "acceptance": ["Lister uniquement SSO et export CSV", "Ne pas inventer de budget ni de date"],
+  "checks": [
+    { "kind": "json_schema", "target": "$text", "schema": {
+      "type": "object", "required": ["requirements"], "additionalProperties": false,
+      "properties": { "requirements": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string" } } }
+    } }
+  ]
+}
