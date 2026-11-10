@@ -5,7 +5,7 @@ import { writeFileAtomically } from './atomic-file.js';
 
 export const digest = data => createHash('sha256').update(data).digest('hex');
 const protectedPart = part => /^(\.git|\.local-ai|\.agents|\.codex|\.aws|node_modules)$/i.test(part)
-  || /^\.env($|\.)/i.test(part) || /^\.local-ai-write-/i.test(part)
+  || /^\.env($|\.)/i.test(part) || /^\.local-ai-write-/i.test(part) || /^\.local-ai-settings\.lock$/i.test(part)
   || /^(local-ai\.config\.json(\.tmp)?|id_rsa|id_ed25519)$/i.test(part)
   || /\.(pem|key|pfx|p12)$/i.test(part);
 

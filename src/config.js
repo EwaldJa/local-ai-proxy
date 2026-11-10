@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isIPv4 } from 'node:net';
 import { writeFileAtomically } from './atomic-file.js';
+import { lockState } from './lock.js';
 
 function isPrivateLan(hostname) {
   if (!isIPv4(hostname)) return false;
@@ -21,6 +22,10 @@ export async function loadConfig(file = process.env.LOCAL_AI_CONFIG) {
   let raw = {};
   try { raw = JSON.parse(await fs.readFile(configFile, 'utf8')); }
   catch (e) { if (e.code !== 'ENOENT' || file) throw e; }
+  return resolveConfig(raw, configFile);
+}
+
+export async function resolveConfig(raw, configFile) {
   // Resolve workspace paths relative to the private config, even when Codex
   // starts the installed plugin from its own directory.
   const root = path.dirname(configFile);
@@ -56,12 +61,25 @@ export async function loadConfig(file = process.env.LOCAL_AI_CONFIG) {
   return config;
 }
 
-export async function savePreferences(config, preferences) {
-  const previous = await fs.readFile(config.configFile, 'utf8').then(JSON.parse).catch(e => {
-    if (e.code === 'ENOENT') return {};
-    throw e;
+export async function readConfigFile(file) {
+  const text = await fs.readFile(file, 'utf8').catch(error => {
+    if (error.code !== 'ENOENT') throw error;
+    return '';
   });
-  const next = { ...previous, models: preferences };
-  await writeFileAtomically(config.configFile, JSON.stringify(next, null, 2) + '\n');
+  return { raw: text ? JSON.parse(text) : {}, revision: createHash('sha256').update(text).digest('hex') };
+}
+
+export async function updateConfig(config, transform) {
+  const unlock = await lockState(path.dirname(config.configFile), '.local-ai-settings.lock');
+  try {
+    const { raw, revision } = await readConfigFile(config.configFile);
+    const next = transform(raw, revision);
+    await resolveConfig(next, config.configFile);
+    await writeFileAtomically(config.configFile, JSON.stringify(next, null, 2) + '\n');
+  } finally { await unlock(); }
+}
+
+export async function savePreferences(config, preferences) {
+  await updateConfig(config, previous => ({ ...previous, models: preferences }));
   config.models = preferences;
 }

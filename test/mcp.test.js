@@ -81,7 +81,10 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
   assert.equal(init.serverInfo.name, 'local-ai-proxy');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const tools = await rpc('tools/list', {});
-  assert.equal(tools.tools.length, 14);
+  assert.equal(tools.tools.length, 17);
+  for (const name of ['local_settings_get', 'local_settings_models', 'local_settings_save']) {
+    assert.deepEqual(tools.tools.find(tool => tool.name === name)._meta.ui.visibility, ['app']);
+  }
   assert.equal(tools.tools.find(x => x.name === 'local_stats').annotations.readOnlyHint, true);
   assert.equal(tools.tools.find(x => x.name === 'local_apply').annotations.destructiveHint, true);
   const panel = tools.tools.find(x => x.name === 'local_status_panel');
@@ -181,4 +184,28 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
     stepId: 'test', instruction: 'Write a test', acceptance: ['Valid output']
   }, _meta: { threadId: 'other-chat' } });
   assert.match(paused.content[0].text, /paused/);
+
+  const settings = await tool('settings_get');
+  assert.equal(settings.values.minContextTokens, 32768);
+  const connection = { url: settings.values.url, allowInsecureLanHttp: false, tokenEnv: null };
+  assert.equal((await tool('settings_models', connection)).models[0].name, 'fixture:latest');
+  const values = { ...settings.values, defaultModel: 'fixture:latest', minContextTokens: 65536, defaultMode: 'manual' };
+  const unsafe = await rpc('tools/call', { name: 'local_settings_save', arguments: {
+    revision: settings.revision, values: { ...values, url: 'http://public.example' }
+  } });
+  assert.equal(unsafe.isError, true);
+  assert.equal((await tool('settings_get')).revision, settings.revision);
+
+  await tool('preferences', { default: 'fixture:latest', byTask: { writing: 'fixture:latest' } });
+  const stale = await rpc('tools/call', { name: 'local_settings_save', arguments: { revision: settings.revision, values } });
+  assert.equal(stale.isError, true);
+  const fresh = await tool('settings_get');
+  const saved = await tool('settings_save', { revision: fresh.revision, values });
+  assert.equal(saved.reloadRequired, true);
+  assert.equal(saved.values.defaultMode, 'manual');
+  assert.equal((await tool('flow')).defaultMode, 'auto');
+  const persisted = JSON.parse(await fs.readFile(config, 'utf8'));
+  assert.equal(persisted.workspace, root);
+  assert.equal(persisted.models.byTask.writing, 'fixture:latest');
+  assert.equal(persisted.limits.minContextTokens, 65536);
 });

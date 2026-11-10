@@ -5,6 +5,10 @@ import { loadConfig } from '../src/config.js';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 const configPath = path.resolve(process.argv[2] || path.join(project, 'local-ai.config.json'));
+// First-time setup can be completed in the plugin's Codex settings form.
+try {
+  await fs.writeFile(configPath, JSON.stringify({ workspace: project, delegation: { workspaceFiles: false } }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+} catch (error) { if (error.code !== 'EEXIST') throw error; }
 await loadConfig(configPath);
 const market = path.join(project, '.local-ai', 'marketplace');
 const plugin = path.join(market, 'plugins', 'local-ai-proxy');

@@ -4,6 +4,7 @@ node_modules/
 local-ai.config.json
 local-ai.config.json.tmp
 .local-ai-write-*
+.local-ai-settings.lock
 .env
 .env.*
 *.log

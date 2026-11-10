@@ -341,7 +341,7 @@ test('a move preserves the source if another writer wins the destination', async
 test('paths block traversal, secrets, NTFS streams and Windows aliases', async t => {
   const f = await fixture(t);
   for (const name of ['../escape', '.git/config', '.env', '.env.prod', 'local-ai.config.json', 'local-ai.config.json.tmp',
-    '.local-ai-write-example', 'a:stream', 'CON.txt', 'a./b', 'x\\y', '/absolute']) {
+    '.local-ai-write-example', '.local-ai-settings.lock', 'a:stream', 'CON.txt', 'a./b', 'x\\y', '/absolute']) {
     await assert.rejects(f.engine.workspace.resolve(name), undefined, name);
   }
 });

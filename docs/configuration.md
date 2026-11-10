@@ -1,6 +1,10 @@
 # Configuration
 
-Start from [the example configuration](../local-ai.config.example.json) and save a private copy as `local-ai.config.json`. Set the fields below for your installation. The `workspace` path is resolved relative to the config file.
+Open **Délégation Ollama → Réglages** in Codex to configure the connection, authentication environment-variable name, default model, context floor, and default delegation mode. The connection test queries installed compatible models without sending a task prompt. Saving writes private settings, which take effect when the plugin is reloaded. Restarting Codex also applies the settings. Existing chat mode overrides continue to take precedence.
+
+The form preserves advanced configuration, including model preferences by task, fixed model profiles, the workspace, and file access policy. A fixed profile for the saved default model is shown in the form because it takes precedence over the global context floor. Reload the saved values before editing again if another chat or tool has changed them.
+
+The preparation script creates the private config on first use. For advanced settings, [the example configuration](../local-ai.config.example.json) documents the available fields. The `workspace` path is resolved relative to the config file.
 
 ## Ollama connection
 
@@ -34,7 +38,7 @@ The prompt estimate uses UTF-8 bytes and is conservative. A model whose reported
 
 An older private configuration may contain `delegation.defaultMode` set to `manual`. Set that field to `auto` to enable automatic delegation by default, then reload the plugin. A mode explicitly saved for a chat takes precedence over the configuration default. Ask Codex to enable automatic delegation in that chat to change it.
 
-The status tab displays `Activée` for automatic delegation, `Manuelle` for explicit requests, and `Désactivée` when paused. Hover over the mode for its explanation. The mode describes the delegation policy. Task execution also requires a reachable Ollama server and a compatible selected model.
+The status tab displays `Activée` for automatic delegation, `Manuelle` for explicit requests, and `Désactivée` when paused. Click the badge to switch between automatic delegation and paused delegation for the current chat. From manual mode, clicking enables automatic delegation. This takes effect immediately and persists for that chat. A running inference can finish, while new submissions are refused when paused. Hover over the badge for its explanation. Task execution also requires a reachable Ollama server and a compatible selected model.
 
 ## Task context
 

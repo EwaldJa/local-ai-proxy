@@ -24,6 +24,7 @@ Configured Ollama instance
 | [`src/validation.js`](../src/validation.js) | Validate the worker's response format and run declarative text or JSON checks. |
 | [`src/workspace.js`](../src/workspace.js) and [`src/atomic-file.js`](../src/atomic-file.js) | Validate workspace paths and file baselines, stage and publish writes, and attempt rollback if an application fails. |
 | [`src/status-panel.js`](../src/status-panel.js) and [`src/ui/delegation-status.html`](../src/ui/delegation-status.html) | Serve the chat status view and its read-only snapshots. |
+| [`src/settings.js`](../src/settings.js) | Expose UI-only settings, test the selected connection, and save validated settings while detecting stale edits. |
 | [`skills/local-delegate/SKILL.md`](../skills/local-delegate/SKILL.md) | Guide Codex on task selection, context, review, and reporting. |
 
 ## Task lifecycle
@@ -41,6 +42,8 @@ With Codex chat metadata, each chat gets a directory named `chat-<sha256>` under
 Each engine serializes mutating tool calls and queues model calls. Task inspection can wait outside the mutation queue. File application uses the workspace lock so file writes from separate plugin chats do not overlap. State snapshots, preferences, and artifacts use exclusively created temporary files beside their targets. The status panel reads the published state without taking a writer lock.
 
 The engine marks queued or running jobs as interrupted when it next opens the state. An interruption during a move can leave both paths present. A batch can be partly applied if the process stops, and caught failures attempt a rollback. The filesystem must support hard links to publish new files without replacing another writer's destination. Filesystem checks assume the configured workspace and local state are trusted. They do not provide a sandbox against a process racing or rewriting local files.
+
+The settings form reads saved configuration through UI-only tools. Saving validates the merged config and preserves advanced fields. A separate config writer lock and a revision hash protect against concurrent or stale edits. Changes apply on plugin reload, so queued tasks retain the process's original connection. Connection discovery happens only when requested in the form and sends no task prompt.
 
 ## Status and metrics
 

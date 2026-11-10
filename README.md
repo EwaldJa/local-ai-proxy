@@ -10,13 +10,7 @@ Local AI Proxy lets Codex delegate focused work to an Ollama model running on yo
 
 You need Node.js 22 or later, pnpm, the Codex CLI, and a running Ollama instance with a compatible text model. This preview installs from a local plugin marketplace.
 
-In a fresh checkout, copy `local-ai.config.example.json` to `local-ai.config.json`.
-
-```powershell
-Copy-Item local-ai.config.example.json local-ai.config.json
-```
-
-Edit your copy before installing.
+Install from the checkout root. First-time setup creates a private configuration automatically with automatic delegation and Codex handling project files.
 
 | Setting | What to configure |
 | --- | --- |
@@ -26,7 +20,7 @@ Edit your copy before installing.
 | `delegation.workspaceFiles` | Use `false` to let Codex handle files across projects. Use `true` to enable scoped file proposals for the configured `workspace`. |
 | `limits.minContextTokens` | Requests at least 32,768 context tokens by default, growing when the task needs more, within the model's capacity. See the [sizing rules](docs/configuration.md#context-window-sizing). |
 
-From the checkout root, prepare and install the plugin.
+Prepare and install the plugin.
 
 ```powershell
 node scripts/prepare-marketplace.js
@@ -35,7 +29,9 @@ codex plugin marketplace add .local-ai/marketplace
 codex plugin add local-ai-proxy@local-ai-proxy-dev
 ```
 
-In Codex, ask to use Local AI Proxy for a task, such as drafting tests from a supplied specification. To see the requests and their verdicts, open **Délégation Ollama** from the chat's new-tab menu.
+In Codex, open **Délégation Ollama** from the chat's new-tab menu and expand **Réglages**. Enter the Ollama address, test the connection, choose a model, and save. Reload the plugin to apply the settings. The same form configures the context floor and default delegation mode. It accepts the name of an environment variable for HTTPS authentication.
+
+Ask Codex to use Local AI Proxy for a task, such as drafting tests from a supplied specification. The panel shows the requests and their verdicts.
 
 ## Privacy and documentation
 

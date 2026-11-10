@@ -32,11 +32,23 @@
     #mode {
       display: inline-flex; align-items: center; gap: 6px; border-radius: 99px;
       padding: 4px 9px; background: var(--surface); color: var(--muted);
-      font-size: 12px; font-weight: 600;
+      font: 600 12px/1.4 system-ui, sans-serif; border: 1px solid transparent; cursor: pointer;
     }
+    #mode:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+    #mode:disabled { cursor: wait; opacity: .65; }
     #mode::before { content: ""; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
     #mode[data-mode="auto"] { color: var(--green); background: var(--green-bg); }
     #mode[data-mode="manual"] { color: var(--amber); background: var(--amber-bg); }
+    #settings { margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    #settings summary { cursor: pointer; font-weight: 600; }
+    #settings fieldset { border: 0; padding: 0; margin: 10px 0 0; min-width: 0; }
+    #settings label { display: block; margin-top: 10px; font-size: 12px; }
+    #settings input:not([type="checkbox"]), #settings select {
+      display: block; width: 100%; min-width: 0; padding: 7px; margin-top: 4px;
+      font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px;
+    }
+    #settings button { cursor: pointer; margin: 8px 5px 0 0; padding: 6px 10px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; }
+    #settings-message { overflow-wrap: anywhere; }
     dl { margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     dl > div { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
     dt, .metric-note, #notice { font-size: 12px; color: var(--muted); }
@@ -71,8 +83,29 @@
   <main>
     <header>
       <h1>Délégation Ollama</h1>
-      <span id="mode" role="status">Chargement</span>
+      <button id="mode" type="button" role="switch" aria-checked="false" disabled>Chargement</button>
     </header>
+    <details id="settings">
+      <summary>Réglages</summary>
+      <p class="metric-note">Réglages communs aux chats. Recharge le plugin après enregistrement pour les appliquer.</p>
+      <form id="settings-form">
+        <fieldset id="settings-fields">
+          <label>Adresse du serveur Ollama<input id="settings-url" type="url" required placeholder="http://127.0.0.1:11434"></label>
+          <label><input id="settings-lan" type="checkbox"> Autoriser HTTP sur une IP privée du réseau local</label>
+          <label>Variable du jeton HTTPS (optionnel)<input id="settings-token" type="text" placeholder="OLLAMA_TOKEN" pattern="[A-Za-z_][A-Za-z0-9_]*"></label>
+          <p class="metric-note">Indique le nom de la variable d’environnement définie sur ce PC.</p>
+          <button id="settings-discover" type="button">Tester et détecter les modèles</button>
+          <label>Modèle par défaut<select id="settings-model"><option value="">Choix automatique si un seul modèle convient</option></select></label>
+          <label>Contexte minimal (tokens)<input id="settings-context" type="number" required min="1" step="1" value="32768"></label>
+          <p id="settings-profile" class="metric-note" hidden></p>
+          <label>Mode par défaut des chats<select id="settings-mode"><option value="auto">Automatique</option><option value="manual">Manuel</option><option value="off">Désactivé</option></select></label>
+          <p class="metric-note">Les modes déjà choisis dans les chats restent prioritaires.</p>
+          <button id="settings-save" type="submit" disabled>Enregistrer</button>
+          <button id="settings-load" type="button">Recharger les valeurs</button>
+        </fieldset>
+      </form>
+      <p id="settings-message" class="metric-note" role="status"></p>
+    </details>
     <dl aria-label="Compteurs de ce chat">
       <div><dt>Requêtes locales</dt><dd id="requests">—</dd></div>
       <div>
@@ -135,12 +168,131 @@
     let refreshTimer;
     let refreshInProgress = false;
     let bridgeReady = false;
+    let modeBusy = false;
+    let modeRevision = 0;
+    let settingsRevision;
+    let settingsBusy = false;
+    let discoveredModels = [];
+    const settingsFields = document.getElementById('settings-fields');
+    const settingsMessage = document.getElementById('settings-message');
+    const settingsModel = document.getElementById('settings-model');
+
+    async function pluginTool(name, args = {}) {
+      const result = bridgeReady
+        ? await call('tools/call', { name, arguments: args }, 25000)
+        : await window.openai.callTool(name, args);
+      if (result?.isError) throw new Error(result.content?.[0]?.text || 'Réglages indisponibles.');
+      return result.structuredContent ?? JSON.parse(result.content[0].text);
+    }
+
+    function modelOptions(selected) {
+      const options = [new Option('Choix automatique si un seul modèle convient', '')];
+      for (const model of discoveredModels) options.push(new Option(model.name, model.name));
+      if (selected && !discoveredModels.some(model => model.name === selected)) options.push(new Option(selected, selected));
+      settingsModel.replaceChildren(...options);
+      settingsModel.value = selected || '';
+    }
+
+    function fillSettings(data) {
+      settingsRevision = data.revision;
+      const values = data.values;
+      document.getElementById('settings-url').value = values.url;
+      document.getElementById('settings-lan').checked = values.allowInsecureLanHttp;
+      document.getElementById('settings-token').value = values.tokenEnv || '';
+      document.getElementById('settings-context').value = values.minContextTokens;
+      document.getElementById('settings-mode').value = values.defaultMode;
+      modelOptions(values.defaultModel);
+      document.getElementById('settings-save').disabled = false;
+      const profile = document.getElementById('settings-profile');
+      profile.hidden = !data.fixedModelContextTokens;
+      profile.textContent = data.fixedModelContextTokens
+        ? `Le modèle enregistré a un profil fixe de ${number.format(data.fixedModelContextTokens)} tokens, prioritaire sur le minimum global.` : '';
+    }
+
+    function connectionValues() {
+      return {
+        url: document.getElementById('settings-url').value.trim(),
+        allowInsecureLanHttp: document.getElementById('settings-lan').checked,
+        tokenEnv: document.getElementById('settings-token').value.trim() || null
+      };
+    }
+
+    async function settingsAction(action) {
+      if (settingsBusy) return;
+      settingsBusy = true;
+      settingsFields.disabled = true;
+      settingsMessage.textContent = 'Chargement…';
+      try { await action(); }
+      catch (error) { settingsMessage.textContent = error.message; }
+      finally { settingsFields.disabled = false; settingsBusy = false; }
+    }
+
+    function loadSettings() {
+      return settingsAction(async () => {
+        fillSettings(await pluginTool('local_settings_get'));
+        settingsMessage.textContent = 'Valeurs enregistrées chargées.';
+      });
+    }
+    document.getElementById('settings').addEventListener('toggle', event => {
+      if (event.target.open && !settingsRevision) loadSettings();
+    });
+    document.getElementById('settings-load').addEventListener('click', loadSettings);
+    document.getElementById('settings-discover').addEventListener('click', () => settingsAction(async () => {
+      const selected = settingsModel.value;
+      const result = await pluginTool('local_settings_models', connectionValues());
+      discoveredModels = result.models;
+      modelOptions(selected);
+      settingsMessage.textContent = `${discoveredModels.length} modèle(s) compatible(s) détecté(s).`;
+    }));
+    document.getElementById('settings-form').addEventListener('submit', event => {
+      event.preventDefault();
+      settingsAction(async () => {
+        const values = { ...connectionValues(), defaultModel: settingsModel.value || null,
+          defaultMode: document.getElementById('settings-mode').value,
+          minContextTokens: Number(document.getElementById('settings-context').value) };
+        fillSettings(await pluginTool('local_settings_save', { revision: settingsRevision, values }));
+        settingsMessage.textContent = 'Réglages enregistrés. Recharge le plugin pour les appliquer.';
+      });
+    });
 
     function report(message) {
       notice.textContent = message;
       notice.hidden = !message;
       if (message && !snapshotVisible) mode.textContent = 'Indisponible';
     }
+
+    function renderMode(value) {
+      if (!Object.hasOwn(labels, value)) throw new Error('Mode de délégation indisponible.');
+      mode.dataset.mode = value;
+      mode.textContent = labels[value];
+      const action = value === 'auto' ? 'Désactiver la délégation dans ce chat' : 'Activer la délégation automatique dans ce chat';
+      mode.title = `${modeDescriptions[value]} Cliquer pour ${value === 'auto' ? 'désactiver' : 'activer'}.`;
+      mode.setAttribute('aria-label', action);
+      mode.setAttribute('aria-checked', String(value === 'auto'));
+      mode.disabled = modeBusy;
+    }
+
+    mode.addEventListener('click', async () => {
+      if (modeBusy || !snapshotVisible) return;
+      const target = mode.dataset.mode === 'auto' ? 'off' : 'auto';
+      modeBusy = true;
+      modeRevision++;
+      mode.disabled = true;
+      mode.setAttribute('aria-busy', 'true');
+      let changed = false;
+      try {
+        const result = await pluginTool('local_flow', { mode: target });
+        renderMode(result.mode);
+        report('');
+        changed = true;
+      } catch (error) { report(error.message); }
+      finally {
+        modeBusy = false;
+        mode.disabled = false;
+        mode.removeAttribute('aria-busy');
+      }
+      if (changed) await refresh();
+    });
 
     function requestElement(tag, className, text) {
       const node = document.createElement(tag);
@@ -201,9 +353,7 @@
       const { localRequests, localInputTokens, localOutputTokens } = data || {};
       if (!Object.hasOwn(labels, data?.mode) || ![localRequests, localInputTokens, localOutputTokens]
           .every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('Compteurs indisponibles.');
-      mode.dataset.mode = data.mode;
-      mode.textContent = labels[data.mode];
-      mode.title = modeDescriptions[data.mode];
+      renderMode(data.mode);
       requests.textContent = number.format(localRequests);
       tokens.textContent = number.format(localInputTokens + localOutputTokens);
       accepted.textContent = Number.isSafeInteger(data.acceptedResponses) ? number.format(data.acceptedResponses) : '—';
@@ -230,13 +380,13 @@
       window.parent.postMessage({ jsonrpc: '2.0', ...message }, hostOrigin);
     }
 
-    function call(method, params) {
+    function call(method, params, timeoutMs = 7000) {
       return new Promise((resolve, reject) => {
         const id = ++sequence;
         const timeout = setTimeout(() => {
           pending.delete(id);
           reject(new Error('Connexion au panneau indisponible.'));
-        }, 7000);
+        }, timeoutMs);
         pending.set(id, { resolve, reject, timeout });
         post({ id, method, params });
       });
@@ -265,13 +415,15 @@
     });
 
     async function refresh() {
-      if (refreshInProgress || document.hidden) return;
+      if (refreshInProgress || modeBusy || document.hidden) return;
       refreshInProgress = true;
+      const revision = modeRevision;
       try {
         const result = bridgeReady
           ? await call('tools/call', { name: 'local_status_snapshot', arguments: {} })
           : await window.openai.callTool('local_status_snapshot', {});
-        render(result);
+        // A snapshot started before a click must not undo its newer mode.
+        if (revision === modeRevision && !modeBusy) render(result);
       } catch {
         report(snapshotVisible ? 'Actualisation interrompue. Dernières valeurs reçues.' : 'Compteurs indisponibles.');
       } finally {
@@ -285,7 +437,7 @@
       }
       try {
         const init = await call('ui/initialize', {
-          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.9' }, appCapabilities: {}
+          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.11' }, appCapabilities: {}
         });
         bridgeReady = true;
         applyTheme(init.hostContext);
