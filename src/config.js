@@ -39,8 +39,10 @@ export async function loadConfig(file = process.env.LOCAL_AI_CONFIG) {
     workspace: await fs.realpath(path.resolve(root, raw.workspace || '.')),
     ollama: { timeoutMs: 300000, tokenEnv: null, ...raw.ollama, url: url.href.replace(/\/$/, '') },
     models: { default: null, byTask: {}, profiles: {}, ...raw.models },
-    delegation: { defaultMode: 'manual', workspaceFiles: true, ...raw.delegation },
-    limits: { contextTokens: 8192, outputTokens: 2048, contextMarginTokens: 512,
+    delegation: { defaultMode: 'auto', workspaceFiles: true, ...raw.delegation },
+    // Accept the older contextTokens setting as a floor during migration.
+    limits: { minContextTokens: raw.limits?.contextTokens ?? 32768,
+      outputTokens: 2048, contextMarginTokens: 512,
       maxFileBytes: 1048576, maxResponseBytes: 4194304, ...raw.limits },
     git: { branchPerChat: false, commits: 'manual', ...raw.git }
   };

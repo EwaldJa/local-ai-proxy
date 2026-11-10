@@ -99,7 +99,12 @@
     </section>
   </main>
   <script>
-    const labels = { auto: 'Activée', manual: 'À la demande', off: 'En pause' };
+    const labels = { auto: 'Activée', manual: 'Manuelle', off: 'Désactivée' };
+    const modeDescriptions = {
+      auto: 'Codex délègue automatiquement les tâches adaptées à Ollama.',
+      manual: 'Codex utilise Ollama uniquement sur demande explicite. Demande-lui d’activer la délégation automatique pour ce chat.',
+      off: 'La délégation locale est suspendue dans ce chat.'
+    };
     const number = new Intl.NumberFormat('fr-FR');
     const percent = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 1 });
     const seconds = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
@@ -198,6 +203,7 @@
           .every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('Compteurs indisponibles.');
       mode.dataset.mode = data.mode;
       mode.textContent = labels[data.mode];
+      mode.title = modeDescriptions[data.mode];
       requests.textContent = number.format(localRequests);
       tokens.textContent = number.format(localInputTokens + localOutputTokens);
       accepted.textContent = Number.isSafeInteger(data.acceptedResponses) ? number.format(data.acceptedResponses) : '—';
@@ -279,7 +285,7 @@
       }
       try {
         const init = await call('ui/initialize', {
-          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.7' }, appCapabilities: {}
+          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.9' }, appCapabilities: {}
         });
         bridgeReady = true;
         applyTheme(init.hostContext);

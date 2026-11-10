@@ -48,6 +48,32 @@ async function fixture(t, output = proposal(), raw = {}) {
   return { root, workspace, config, backend, engine, submit };
 }
 
+test('delegation defaults to auto while explicit config and saved chat modes take precedence', async t => {
+  const f = await fixture(t);
+  assert.equal(f.config.delegation.defaultMode, 'auto');
+  assert.equal((await f.engine.call('flow', { chatId: 'new-chat' })).mode, 'auto');
+
+  const example = JSON.parse(await fs.readFile(new URL('../local-ai.config.example.json', import.meta.url), 'utf8'));
+  await fs.writeFile(f.config.configFile, JSON.stringify({ ...example, workspace: f.workspace }));
+  assert.equal((await loadConfig(f.config.configFile)).delegation.defaultMode, 'auto');
+  for (const mode of ['manual', 'off']) {
+    await fs.writeFile(f.config.configFile, JSON.stringify({ workspace: f.workspace, delegation: { defaultMode: mode } }));
+    const config = await loadConfig(f.config.configFile);
+    assert.equal(new Engine(config, f.backend).modeFor('new-chat'), mode);
+  }
+
+  await fs.writeFile(f.config.configFile, JSON.stringify({ workspace: f.workspace }));
+  await f.engine.call('flow', { chatId: 'chat-1', mode: 'off' });
+  await f.engine.call('flow', { chatId: 'manual-chat', mode: 'manual' });
+  await f.engine.close();
+  const restarted = await new Engine(await loadConfig(f.config.configFile), f.backend).init();
+  try {
+    assert.equal(restarted.modeFor('chat-1'), 'off');
+    assert.equal(restarted.modeFor('manual-chat'), 'manual');
+    assert.equal(restarted.modeFor('new-chat'), 'auto');
+  } finally { await restarted.close(); }
+});
+
 test('general extraction stays staged until independent review; metrics distinguish plan estimates', async t => {
   const f = await fixture(t, proposal([], '{"requirements":["SSO","CSV"]}'), {
     models: { profiles: { 'worker:latest': { contextTokens: 32768 } } }
@@ -178,11 +204,79 @@ test('failed deterministic checks cannot be accepted', async t => {
 });
 
 test('oversize input asks for splitting without a model request', async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, proposal(), { models: { profiles: { 'worker:latest': { contextTokens: 8192 } } } });
   const result = await f.submit({ context: 'é'.repeat(5000) });
   assert.equal(result.status, 'needs_split');
+  assert.equal(result.budget.maxContextTokens, 8192);
   assert.equal(f.backend.calls.length, 0);
   assert.equal(f.engine.stats().localRequests, 0);
+});
+
+test('runtime context starts at the configured floor and grows while reserving response space', async t => {
+  const windows = [];
+  const cases = [
+    { length: 0, floor: 32768 },
+    { length: 9000, floor: 16384 },
+    { length: 20000, floor: 16384 },
+    { length: 30000, instructionLength: 10000, floor: 32768 }
+  ];
+  for (const entry of cases) {
+    const settings = entry.length === 0 ? {} : { limits: { minContextTokens: entry.floor } };
+    const f = await fixture(t, proposal(), settings);
+    f.backend.models = async () => [{ ...names[0], maxContextTokens: 65536 }];
+    const task = await f.submit({ context: 'x'.repeat(entry.length), instruction: 'x'.repeat(entry.instructionLength || 20) });
+    await f.engine.idle();
+    assert.equal(task.status, 'queued');
+    assert.equal(task.budget.minContextTokens, entry.floor);
+    assert.equal(task.budget.maxContextTokens, 65536);
+    assert.ok(task.budget.contextTokens >= entry.floor);
+    assert.ok(task.budget.requiredContextTokens <= task.budget.contextTokens);
+    assert.ok(task.budget.estimatedInputTokens <= task.budget.promptBudget);
+    assert.equal(f.backend.calls[0].contextTokens, task.budget.contextTokens);
+    windows.push(task.budget.contextTokens);
+  }
+  assert.equal(windows[0], 32768);
+  assert.equal(windows[1], 16384);
+  assert.ok(windows[2] > windows[1]);
+  assert.ok(windows[3] > windows[0] && windows[3] <= 65536);
+});
+
+test('adaptive context honors the per-model profile and reported model capacity', async t => {
+  const profiled = await fixture(t, proposal(), { models: { profiles: { 'worker:latest': { contextTokens: 8192 } } } });
+  const bounded = await profiled.submit({ context: 'x'.repeat(9000) });
+  assert.equal(bounded.status, 'needs_split');
+  assert.equal(bounded.budget.maxContextTokens, 8192);
+  assert.equal(profiled.backend.calls.length, 0);
+
+  const smaller = await fixture(t, proposal(), { limits: { minContextTokens: 16384 } });
+  smaller.backend.models = async () => [{ ...names[0], maxContextTokens: 12288 }];
+  const capped = await smaller.submit({ context: 'x'.repeat(9000) });
+  assert.equal(capped.status, 'needs_split');
+  assert.equal(capped.budget.contextTokens, 12288);
+  assert.equal(capped.budget.maxContextTokens, 12288);
+  assert.equal(smaller.backend.calls.length, 0);
+});
+
+test('a task beyond reported model capacity asks for splitting before inference', async t => {
+  const f = await fixture(t);
+  const result = await f.submit({ context: 'x'.repeat(30000), instruction: 'x'.repeat(10000) });
+  assert.equal(result.status, 'needs_split');
+  assert.equal(result.budget.contextTokens, 32768);
+  assert.ok(result.budget.requiredContextTokens > result.budget.maxContextTokens);
+  assert.equal(f.backend.calls.length, 0);
+});
+
+test('legacy context settings supply a floor when model capacity is unknown', async t => {
+  const f = await fixture(t, proposal(), { limits: { contextTokens: 16384 } });
+  assert.equal(f.config.limits.minContextTokens, 16384);
+  f.backend.models = async () => [{ ...names[0], maxContextTokens: null }];
+  const task = await f.submit({ context: 'x'.repeat(30000), instruction: 'x'.repeat(10000) });
+  await f.engine.idle();
+  assert.equal(task.status, 'queued');
+  assert.equal(task.budget.maxContextTokens, null);
+  assert.ok(task.budget.contextTokens > 32768);
+  assert.ok(task.budget.requiredContextTokens <= task.budget.contextTokens);
+  assert.equal(f.backend.calls[0].contextTokens, task.budget.contextTokens);
 });
 
 test('line ranges send only selected source context', async t => {
@@ -368,7 +462,7 @@ test('truncated generation and excess observed context are rejected', async t =>
   await f.engine.idle();
   assert.equal(f.engine.task(first).status, 'invalid_response');
   assert.match(f.engine.task(first).error, /Output token limit/);
-  f.backend.generate = async () => ({ message: { content: JSON.stringify(proposal()) }, prompt_eval_count: 8000 });
+  f.backend.generate = async input => ({ message: { content: JSON.stringify(proposal()) }, prompt_eval_count: input.contextTokens });
   const second = await f.submit();
   await f.engine.idle();
   assert.match(f.engine.task(second).error, /Observed prompt/);

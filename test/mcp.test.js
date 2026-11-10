@@ -12,12 +12,15 @@ import { chatStateDir } from '../src/config.js';
 test('MCP STDIO: discovery, background task, review, apply and statistics work end to end', { timeout: 15000 }, async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'local-ai-mcp-test-'));
   let doneReason = 'stop';
+  const requestedContexts = [];
   const backend = createServer(async (req, res) => {
-    for await (const _ of req) { /* consume the request body */ }
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    if (req.url === '/api/chat') requestedContexts.push(JSON.parse(Buffer.concat(chunks).toString('utf8')).options.num_ctx);
     const data = {
       '/api/tags': { models: [{ name: 'fixture:latest' }] },
       '/api/ps': { models: [] },
-      '/api/show': { capabilities: ['completion'], model_info: { 'general.architecture': 'fixture', 'fixture.context_length': 8192 } },
+      '/api/show': { capabilities: ['completion'], model_info: { 'general.architecture': 'fixture', 'fixture.context_length': 65536 } },
       '/api/chat': { done: true, done_reason: doneReason, prompt_eval_count: 100, eval_count: 50, eval_duration: 1e9,
         message: { content: JSON.stringify({ status: 'completed', summary: 'Brief reformatted', text: 'ok',
           changes: [{ op: 'write', path: 'brief.md', content: 'SSO and CSV are required.\n' }] }) } }
@@ -89,12 +92,14 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
   const emptyMetrics = { localRequests: 0, localInputTokens: 0, localOutputTokens: 0,
     acceptedResponses: 0, rejectedResponses: 0, awaitingReview: 0, needsContextResponses: 0,
     generationTokensPerMinute: null, lastContext: null, recentRequests: [] };
-  assert.deepEqual(await tool('status_panel'), { mode: 'manual', ...emptyMetrics });
+  assert.deepEqual(await tool('status_panel'), { mode: 'auto', ...emptyMetrics });
   assert.equal((await tool('models')).models[0].name, 'fixture:latest');
   assert.deepEqual((await tool('flow')).chatId, 'mcp-chat');
   await tool('flow', { mode: 'off' }, 'other-chat');
   assert.equal((await tool('flow', {}, 'other-chat')).mode, 'off');
-  assert.equal((await tool('flow')).mode, 'manual');
+  assert.equal((await tool('flow')).mode, 'auto');
+  await tool('flow', { mode: 'manual' }, 'manual-chat');
+  assert.deepEqual(await tool('status_snapshot', {}, 'manual-chat'), { mode: 'manual', ...emptyMetrics });
   await tool('plan', { goal: 'Reformat a presales brief', steps: [
     { id: 'format', executor: 'local', title: 'Reformat', taskType: 'writing', weight: 1 }
   ] });
@@ -103,6 +108,8 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
     allowedOutputs: ['brief.md'], acceptance: ['Preserve both requirements'],
     checks: [{ kind: 'contains', target: 'brief.md', value: 'SSO' }] });
   const status = await waitForTask(submitted.taskId);
+  assert.equal(submitted.budget.minContextTokens, 32768);
+  assert.equal(requestedContexts[0], 32768);
   assert.equal(status.status, 'awaiting_review', status.error);
   assert.equal(status.reviewRequired, true);
   assert.match(status.proposal.content, /SSO and CSV are required/);
@@ -133,9 +140,9 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
   const rejectionEvidence = 'The alternative did not include a title.';
   await tool('review', { taskId: alternative.taskId, decision: 'reject', evidence: rejectionEvidence });
   const { recentRequests, ...snapshot } = await tool('status_snapshot');
-  assert.deepEqual(snapshot, { mode: 'manual', localRequests: 2, localInputTokens: 200, localOutputTokens: 100,
+  assert.deepEqual(snapshot, { mode: 'auto', localRequests: 2, localInputTokens: 200, localOutputTokens: 100,
     acceptedResponses: 1, rejectedResponses: 1, awaitingReview: 0, needsContextResponses: 0, generationTokensPerMinute: 3000,
-    lastContext: { measuredTokens: 150, requestedTokens: 8192, fillPercent: 150 * 100 / 8192 } });
+    lastContext: { measuredTokens: 150, requestedTokens: 32768, fillPercent: 150 * 100 / 32768 } });
   assert.deepEqual(recentRequests.map(({ title, preview, verdict }) => ({ title, preview, verdict })), [
     { title: 'Draft alternative', preview: 'Draft an alternative', verdict: 'rejected' },
     { title: 'Reformat', preview: 'Write the supplied brief in Markdown.', verdict: 'accepted' }

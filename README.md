@@ -22,8 +22,9 @@ Edit your copy before installing.
 | --- | --- |
 | `ollama.url` | Defaults to `http://127.0.0.1:11434`. Use the URL of the Ollama instance you trust. |
 | `models.default` | Set the exact installed model name if several compatible models are available. |
-| `delegation.defaultMode` | Starts in `manual`. Use `auto` to make delegation the default in new chats. |
+| `delegation.defaultMode` | Defaults to `auto` for automatic delegation in new chats. Use `manual` for explicit requests or `off` to pause. |
 | `delegation.workspaceFiles` | Use `false` to let Codex handle files across projects. Use `true` to enable scoped file proposals for the configured `workspace`. |
+| `limits.minContextTokens` | Requests at least 32,768 context tokens by default, growing when the task needs more, within the model's capacity. See the [sizing rules](docs/configuration.md#context-window-sizing). |
 
 From the checkout root, prepare and install the plugin.
 

@@ -7,7 +7,7 @@ Use the `local_*` tools exposed by Local AI Proxy. This is a supervisor/worker w
 
 ## Routing throughout the chat
 
-- At the first applicable request, call `local_flow` without a mode to learn the chat's setting. Codex attaches its actual chat ID, so omit `chatId` on tool calls. Older MCP hosts can supply a stable chat ID explicitly and reuse it throughout the conversation.
+- At the first applicable request, call `local_flow` without a mode to learn the chat's setting. New installations default to `auto`. Existing config and chat overrides can select `manual` or `off`. Codex attaches its actual chat ID, so omit `chatId` on tool calls. Older MCP hosts can supply a stable chat ID explicitly and reuse it throughout the conversation.
 - In `auto`, aim to give Ollama as much of the production work as can be verified. Before writing the solution, assign each independently reviewable piece of implementation, test drafting, refactoring, documentation or extraction to `local` when its inputs and acceptance criteria can be supplied. This applies to a single focused change and to each batch of a longer task. Split a large piece into smaller deliverables when that makes it delegable.
 - Submit eligible pieces before drafting them yourself. Queue independent pieces together when useful, then use the waiting time to inspect dependencies, prepare checks or work on separate steps. Keep a submitted piece assigned to Ollama while it runs. Codex owns planning, review, integration and verification.
 - If a proposal fails, identify the cause. When a correction is feasible, give Ollama a smaller scope, the missing fact or the specific review feedback and retry. Use Codex for the piece when local execution is unavailable, context cannot be supplied, or the proposal still falls short after a targeted retry. Record the actual reason for material fallbacks.
@@ -24,11 +24,23 @@ Use the `local_*` tools exposed by Local AI Proxy. This is a supervisor/worker w
 ## Segment and delegate
 
 - Register a short goal and independently reviewable steps assigned to `local` or `codex`. Weights estimate effort. Include Codex review and integration steps so the progress report covers the entire flow.
-- Write acceptance criteria before generation. Send concrete contracts, excerpts and expected outputs before submitting. For inline code, state the interfaces and data shapes needed to draft it, and name the deliverable to return as text. If Ollama requests context, verify which fact is genuinely missing. Supply it or clarify that a self-contained draft is sufficient before retrying. Keep unrelated files and conversation history out of the payload.
+- Write acceptance criteria before generation. Prepare the self-contained context described below before submitting, and name the exact deliverable to return as text or file proposals.
 - Split data by records and stable IDs, documents by meaningful sections with overlapping context when needed, and code by small changes with explicit interfaces. Keep cross-chunk conclusions and final reconciliation in the host. If the dependency boundary is unclear, resolve it before delegating.
 - `local_submit` can return `needs_split` before inference. Reduce context or split; it does not silently truncate. The byte-based budget is conservative and approximate. Reserve output tokens and template margin. The requested context and observed counts are not proof that Ollama never truncated internally.
 - The worker returns text, JSON encoded in text, full UTF-8 file writes, or moves within `allowedOutputs`. For sorting, provide filenames/metadata and ask for a move plan; files need not be read into the model. DOCX/XLSX/PDF and other binary content require an appropriate host adapter; never write plain text over a binary document.
 - Use `local_task` with `waitMs: 15000` and `proposalChars: 4000` to retrieve both status and a review excerpt. If `nextOffset` is present, read the remaining necessary material with `local_artifact`. Use `local_cancel` for obsolete work. A failure may need a smaller task, another approved model or host execution.
+
+## Provide sufficient task context
+
+Ollama sees only the submitted instruction, context, acceptance criteria, and any explicitly supplied file excerpts. It has no access to this chat, the project's files, the web, or previous local tasks. Gather the necessary material with the host's authorized tools before delegating.
+
+- State the objective, decisions already made, scope, required output format, and observable success criteria.
+- Include the actual content to transform. For code, provide the current implementation plus relevant dependency signatures, data structures, caller usage, versions, and tests or error messages. Include the complete target function or file when a smaller excerpt would hide behavior that must be preserved.
+- For writing or data work, provide the relevant source passages or records, definitions, schema, IDs, units, audience, tone, and format constraints as applicable. Include results from earlier local tasks when the new task depends on them.
+- Check whether the task can be completed using only this material. Resolve missing references such as "the function above" or "the same format" into concrete content. Supply enough relevant context to avoid guessing. There is no target minimum length or context-fill percentage.
+- The engine sizes `num_ctx` from the assembled material plus output reserve and margin, requesting at least `limits.minContextTokens` (32,768 by default) and growing when necessary. The model's reported capacity bounds the request. An explicit model profile keeps its configured window. Check the returned `budget`, including `minContextTokens`, `requiredContextTokens` and `maxContextTokens`. If it returns `needs_split`, divide the task at a meaningful boundary or adjust the approved runtime profile. Keep the dependencies needed for each part.
+
+When Ollama returns `needs_context`, inspect the requested fact and supply the missing excerpt, contract, or data before retrying. Clarify the scope when the supplied material already suffices. Repeating the same underspecified request leaves the dependency unresolved.
 
 ## Validate, accept, apply
 

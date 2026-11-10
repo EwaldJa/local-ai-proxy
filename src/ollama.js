@@ -43,7 +43,7 @@ export class Ollama {
       const context = detail.model_info?.[`${architecture}.context_length`];
       return { name, available: true, remote: Boolean(detail.remote_host || detail.remote_model),
         remoteHost: detail.remote_host || null, capabilities: detail.capabilities || null,
-        maxContextTokens: Number.isSafeInteger(context) ? context : null,
+        maxContextTokens: Number.isSafeInteger(context) && context > 0 ? context : null,
         loadedContextTokens: loaded?.context_length || null,
         loaded: Boolean(loaded), details: item.details || {}, thinking: detail.thinking || null };
     }));
