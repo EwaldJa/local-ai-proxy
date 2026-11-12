@@ -39,7 +39,7 @@ try {
     }
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log(`Local AI Proxy 0.3.11
+    console.log(`Local AI Proxy 0.3.16
 node src/cli.js init                      Créer une configuration personnelle
 node src/cli.js doctor                    Tester Ollama et découvrir les modèles
 node src/cli.js stats [chatId]            Lire les statistiques, même si MCP tourne

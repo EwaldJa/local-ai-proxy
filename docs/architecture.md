@@ -47,6 +47,14 @@ The settings form reads saved configuration through UI-only tools. Saving valida
 
 ## Status and metrics
 
+The server instructions and `local-delegate` skill ask Codex to read `local_flow` at the first exchange of each new or resumed chat, before other work, including messages that need no local generation. Its `statusPanel` hint names `local_status_panel` and requests `open` when the mode is not `off` and no successful panel request has been recorded for that chat in this MCP process. Only successful `local_status_panel` calls record that request; background snapshots do not. The hint is scoped using the host's chat ID and resets on MCP restart. Codex is instructed not to repeat failed attempts or reopen a user-closed panel during the session. The server cannot observe tab visibility. Opening remains an instruction-driven model action, so it requires a model turn and host UI support; there is no host-level empty-chat creation or tab-visibility hook.
+
+`local_status_panel` renders the view in a chat, and users can also open it from the chat's app menu. On mounting an inline view, the UI makes one best-effort request for `fullscreen` through the MCP Apps bridge, with an OpenAI runtime fallback if the bridge method is unavailable. The host controls the resulting presentation and may keep it inline. Already expanded views and hosts that explicitly exclude fullscreen are left alone. Display-mode errors do not interrupt polling or controls.
+
+The registered tool and resource titles use the MCP host machine's default locale: “Délégation modèle local” for French, otherwise “Local LLM delegation”. The panel's document title and heading use the UI host's locale when supplied. The remaining panel controls currently use French.
+
+After the initial automatic opening attempt, the server instructions and skill ask Codex to include a short onboarding note in its chat response, even if the UI failed. It explains manual opening from the tab menu, plugin settings, and the chat-scoped mode badge. Conversation history is used to avoid repeating it on subsequent messages or resumes; it is not a global first-install counter and adds no banner to the panel.
+
 The status tab polls for the current chat's mode, review counts, and up to 20 recent requests. It shows measured input and output tokens, local start time, and elapsed time when available. Generation speed uses Ollama's measured generation duration. Context usage divides measured prompt and output tokens by the requested context window. The engine's task weights describe estimated allocation, and Codex token usage and savings are unavailable.
 
 ## Development checks

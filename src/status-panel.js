@@ -6,6 +6,9 @@ import { Engine } from './engine.js';
 
 const resourceUri = 'ui://local-ai-proxy/delegation-status.html';
 const mimeType = 'text/html;profile=mcp-app';
+// Tool titles are registered before the UI receives the host's locale.
+const panelTitle = Intl.DateTimeFormat().resolvedOptions().locale.startsWith('fr')
+  ? 'Délégation modèle local' : 'Local LLM delegation';
 const recentRequestLimit = 20;
 const taskIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -58,10 +61,11 @@ export function codexChatId(ctx) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(id) ? id : null;
 }
 
-export function registerStatusPanel(server, config) {
+export function registerStatusPanel(server, config, { onPanelRequested = () => {} } = {}) {
   server.registerResource('delegation-status', resourceUri, {
-    title: 'Délégation Ollama', mimeType
+    title: panelTitle, mimeType
   }, async () => ({ contents: [{ uri: resourceUri, mimeType,
+    _meta: { 'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'] } },
     text: await fs.readFile(new URL('./ui/delegation-status.html', import.meta.url), 'utf8')
   }] }));
 
@@ -101,10 +105,14 @@ export function registerStatusPanel(server, config) {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   };
   server.registerTool('local_status_panel', {
-    ...options, title: 'Délégation Ollama',
-    description: 'Open the current chat’s delegation status and local usage counters.',
-    _meta: { ui: { resourceUri, visibility: ['app'] }, 'openai/ui': { entrypoints: [{ type: 'thread' }] } }
-  }, snapshot);
+    ...options, title: panelTitle,
+    description: 'Display the current chat’s delegation controls and usage counters, even before any local request. Call once when local_flow returns statusPanel.action open, or when the user asks to see the panel. The UI requests an expanded tab automatically.',
+    _meta: { ui: { resourceUri, visibility: ['model', 'app'] }, 'openai/ui': { entrypoints: [{ type: 'thread' }] } }
+  }, async (input, ctx) => {
+    const result = await snapshot(input, ctx);
+    if (!result.isError) onPanelRequested(codexChatId(ctx));
+    return result;
+  });
   server.registerTool('local_status_snapshot', {
     ...options, description: 'Refresh the delegation status panel for the current chat.',
     _meta: { ui: { visibility: ['app'] } }

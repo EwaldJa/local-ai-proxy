@@ -88,21 +88,37 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
   assert.equal(tools.tools.find(x => x.name === 'local_stats').annotations.readOnlyHint, true);
   assert.equal(tools.tools.find(x => x.name === 'local_apply').annotations.destructiveHint, true);
   const panel = tools.tools.find(x => x.name === 'local_status_panel');
+  assert.deepEqual(panel._meta.ui.visibility, ['model', 'app']);
   assert.deepEqual(panel._meta['openai/ui'].entrypoints, [{ type: 'thread' }]);
   const resource = await rpc('resources/read', { uri: panel._meta.ui.resourceUri });
   assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app');
+  assert.deepEqual(resource.contents[0]._meta['openai/ui'].availableDisplayModes, ['inline', 'fullscreen']);
   assert.match(resource.contents[0].text, /Tokens traités/);
   const emptyMetrics = { localRequests: 0, localInputTokens: 0, localOutputTokens: 0,
     acceptedResponses: 0, rejectedResponses: 0, awaitingReview: 0, needsContextResponses: 0,
     generationTokensPerMinute: null, lastContext: null, recentRequests: [] };
+  const panelAction = async (chatId = 'mcp-chat') => (await tool('flow', {}, chatId)).statusPanel;
+  assert.deepEqual(await panelAction(), { tool: 'local_status_panel', action: 'open' });
+  // Polling a snapshot must not suppress the first actual panel request.
+  await tool('status_snapshot');
+  assert.equal((await panelAction()).action, 'open');
   assert.deepEqual(await tool('status_panel'), { mode: 'auto', ...emptyMetrics });
+  assert.equal((await panelAction()).action, 'none');
+  assert.equal(requestedContexts.length, 0, 'Opening the initial panel needs no inference');
+  assert.equal((await panelAction('other-chat')).action, 'open');
+  assert.equal((await tool('flow', { mode: 'off' }, 'other-chat')).statusPanel.action, 'none');
+  assert.equal((await tool('flow', { mode: 'auto' }, 'other-chat')).statusPanel.action, 'open');
   assert.equal((await tool('models')).models[0].name, 'fixture:latest');
   assert.deepEqual((await tool('flow')).chatId, 'mcp-chat');
   await tool('flow', { mode: 'off' }, 'other-chat');
   assert.equal((await tool('flow', {}, 'other-chat')).mode, 'off');
   assert.equal((await tool('flow')).mode, 'auto');
-  await tool('flow', { mode: 'manual' }, 'manual-chat');
+  assert.equal((await tool('flow', { mode: 'manual' }, 'manual-chat')).statusPanel.action, 'open');
   assert.deepEqual(await tool('status_snapshot', {}, 'manual-chat'), { mode: 'manual', ...emptyMetrics });
+  assert.equal((await panelAction('manual-chat')).action, 'open');
+  await tool('status_panel', {}, 'manual-chat');
+  assert.equal((await panelAction('manual-chat')).action, 'none');
+  assert.equal((await panelAction()).action, 'none');
   await tool('plan', { goal: 'Reformat a presales brief', steps: [
     { id: 'format', executor: 'local', title: 'Reformat', taskType: 'writing', weight: 1 }
   ] });

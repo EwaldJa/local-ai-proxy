@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Délégation Ollama</title>
+  <title>Délégation modèle local</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -82,7 +82,7 @@
 <body>
   <main>
     <header>
-      <h1>Délégation Ollama</h1>
+      <h1>Délégation modèle local</h1>
       <button id="mode" type="button" role="switch" aria-checked="false" disabled>Chargement</button>
     </header>
     <details id="settings">
@@ -168,6 +168,8 @@
     let refreshTimer;
     let refreshInProgress = false;
     let bridgeReady = false;
+    let hostContext = {};
+    let displayModeRequested = false;
     let modeBusy = false;
     let modeRevision = 0;
     let settingsRevision;
@@ -392,8 +394,36 @@
       });
     }
 
-    function applyTheme(context) {
+    function applyHostContext(context) {
+      hostContext = { ...hostContext, ...context };
+      const locale = hostContext.locale ?? window.openai?.locale ?? document.documentElement.lang;
+      const title = /^en(?:-|$)/i.test(locale) ? 'Local LLM delegation' : 'Délégation modèle local';
+      document.title = title;
+      document.querySelector('h1').textContent = title;
       if (context?.theme === 'light' || context?.theme === 'dark') document.documentElement.dataset.theme = context.theme;
+    }
+
+    async function requestExpandedDisplay() {
+      if (displayModeRequested) return;
+      displayModeRequested = true;
+      const currentMode = hostContext.displayMode ?? window.openai?.displayMode;
+      const availableModes = hostContext.availableDisplayModes ?? window.openai?.availableDisplayModes;
+      // Do not reopen an expanded view or ask for a mode the host explicitly excludes.
+      if (currentMode && currentMode !== 'inline') return;
+      if (Array.isArray(availableModes) && !availableModes.includes('fullscreen')) return;
+      try {
+        if (bridgeReady) {
+          await call('ui/request-display-mode', { mode: 'fullscreen' });
+          return;
+        }
+      } catch {
+        // Older hosts may expose only the OpenAI display-mode helper.
+      }
+      try {
+        await window.openai?.requestDisplayMode?.({ mode: 'fullscreen' });
+      } catch {
+        // Expansion is optional; a refusal must not interrupt counters or controls.
+      }
     }
 
     window.addEventListener('message', event => {
@@ -410,7 +440,7 @@
       } else if (message.method === 'ui/notifications/tool-result') {
         try { render(message.params); } catch (error) { report(error.message); }
       } else if (message.method === 'ui/notifications/host-context-changed') {
-        applyTheme(message.params);
+        applyHostContext(message.params);
       }
     });
 
@@ -437,10 +467,11 @@
       }
       try {
         const init = await call('ui/initialize', {
-          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.11' }, appCapabilities: {}
+          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.16' },
+          appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] }
         });
         bridgeReady = true;
-        applyTheme(init.hostContext);
+        applyHostContext(init.hostContext);
         post({ method: 'ui/notifications/initialized', params: {} });
       } catch {
         if (typeof window.openai?.callTool !== 'function') {
@@ -448,6 +479,8 @@
           return;
         }
       }
+      // Ask once on mount, independently of polling. The host chooses the actual layout.
+      void requestExpandedDisplay();
       if (!snapshotVisible) await refresh();
       refreshTimer = setInterval(refresh, 3000);
       document.addEventListener('visibilitychange', refresh);

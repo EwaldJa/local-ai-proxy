@@ -29,7 +29,9 @@ codex plugin marketplace add .local-ai/marketplace
 codex plugin add local-ai-proxy@local-ai-proxy-dev
 ```
 
-In Codex, open **Délégation Ollama** from the chat's new-tab menu and expand **Réglages**. Enter the Ollama address, test the connection, choose a model, and save. Reload the plugin to apply the settings. The same form configures the context floor and default delegation mode. It accepts the name of an environment variable for HTTPS authentication.
+On the first exchange in a new or resumed Codex chat, the plugin instructs Codex to open **Local LLM delegation** (**Délégation modèle local** in French) when delegation is enabled. The panel then requests an expanded tab and shows counters before any Ollama task runs. This starts with a model response, not with the creation of an empty chat. Codex also gives a short introduction in the chat explaining the settings, the per-chat toggle, and how to open the tab manually if it did not appear. The introduction is not repeated once explained in that chat.
+
+Expand **Réglages** in the panel. Enter the Ollama address, test the connection, choose a model, and save. Reload the plugin to apply the settings. The same form configures the context floor and default delegation mode. It accepts the name of an environment variable for HTTPS authentication.
 
 Ask Codex to use Local AI Proxy for a task, such as drafting tests from a supplied specification. The panel shows the requests and their verdicts.
 
