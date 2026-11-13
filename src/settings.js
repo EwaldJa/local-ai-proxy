@@ -10,7 +10,8 @@ const connection = z.object({
 const valuesSchema = connection.extend({
   defaultModel: z.string().min(1).max(200).nullable(),
   defaultMode: z.enum(['auto', 'manual', 'off']),
-  minContextTokens: z.number().int().positive()
+  minContextTokens: z.number().int().positive(),
+  outputTokens: z.number().int().positive().optional()
 }).strict();
 
 function mergeSettings(raw, values) {
@@ -18,7 +19,8 @@ function mergeSettings(raw, values) {
     ollama: { ...raw.ollama, url: values.url, allowInsecureLanHttp: values.allowInsecureLanHttp, tokenEnv: values.tokenEnv },
     models: { ...raw.models, default: values.defaultModel },
     delegation: { ...raw.delegation, defaultMode: values.defaultMode },
-    limits: { ...raw.limits, minContextTokens: values.minContextTokens }
+    limits: { ...raw.limits, minContextTokens: values.minContextTokens,
+      ...(values.outputTokens === undefined ? {} : { outputTokens: values.outputTokens }) }
   };
 }
 
@@ -29,8 +31,10 @@ export function registerSettings(server, config) {
     return { revision, values: {
       url: saved.ollama.url, allowInsecureLanHttp: saved.ollama.allowInsecureLanHttp === true,
       tokenEnv: saved.ollama.tokenEnv, defaultModel: saved.models.default,
-      defaultMode: saved.delegation.defaultMode, minContextTokens: saved.limits.minContextTokens
-    }, fixedModelContextTokens: saved.models.profiles[saved.models.default]?.contextTokens ?? null };
+      defaultMode: saved.delegation.defaultMode, minContextTokens: saved.limits.minContextTokens,
+      outputTokens: saved.limits.outputTokens
+    }, fixedModelContextTokens: saved.models.profiles[saved.models.default]?.contextTokens ?? null,
+    fixedModelOutputTokens: saved.models.profiles[saved.models.default]?.outputTokens ?? null };
   }
   function register(name, schema, readOnlyHint, handler) {
     server.registerTool(name, {

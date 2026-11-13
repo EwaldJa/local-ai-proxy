@@ -55,7 +55,7 @@ The registered tool and resource titles use the MCP host machine's default local
 
 After the initial automatic opening attempt, the server instructions and skill ask Codex to include a short onboarding note in its chat response, even if the UI failed. It explains manual opening from the tab menu, plugin settings, and the chat-scoped mode badge. Conversation history is used to avoid repeating it on subsequent messages or resumes; it is not a global first-install counter and adds no banner to the panel.
 
-The status tab polls for the current chat's mode, review counts, and up to 20 recent requests. It shows measured input and output tokens, local start time, and elapsed time when available. Generation speed uses Ollama's measured generation duration. Context usage divides measured prompt and output tokens by the requested context window. The engine's task weights describe estimated allocation, and Codex token usage and savings are unavailable.
+The status tab polls for the current chat's mode, review counts, and up to 20 recent requests. Each row shows the model and context window requested for that call, measured input and output tokens, local start time, and elapsed time when available. The window comes from the saved task budget, with recorded usage as a legacy fallback; unknown values appear as a dash. It does not change when current settings change and does not claim to measure the window actually allocated by Ollama. Generation speed uses Ollama's measured generation duration. Context usage divides measured prompt and output tokens by the requested context window. The engine's task weights describe estimated allocation, and Codex token usage and savings are unavailable.
 
 ## Development checks
 

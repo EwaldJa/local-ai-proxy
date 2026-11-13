@@ -1,6 +1,6 @@
 {
   "name": "local-ai-proxy",
-  "version": "0.3.16",
+  "version": "0.3.18",
   "description": "Use your own Ollama models for bounded text, file and data work under Codex supervision.",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "local-ai-proxy",
-  "version": "0.3.16",
+  "version": "0.3.18",
   "description": "Delegate bounded text, file, data, presales and coding tasks to your own Ollama models.",
   "extensions": {
     "com.openai": {

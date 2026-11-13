@@ -159,6 +159,8 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
   const rejectionEvidence = 'The alternative did not include a title.';
   await tool('review', { taskId: alternative.taskId, decision: 'reject', evidence: rejectionEvidence });
   const { recentRequests, ...snapshot } = await tool('status_snapshot');
+  assert.deepEqual(recentRequests.map(row => row.model), ['fixture:latest', 'fixture:latest']);
+  assert.deepEqual(recentRequests.map(row => row.contextTokens), [...requestedContexts].reverse());
   assert.deepEqual(snapshot, { mode: 'auto', localRequests: 2, localInputTokens: 200, localOutputTokens: 100,
     acceptedResponses: 1, rejectedResponses: 1, awaitingReview: 0, needsContextResponses: 0, generationTokensPerMinute: 3000,
     lastContext: { measuredTokens: 150, requestedTokens: 32768, fillPercent: 150 * 100 / 32768 } });
@@ -203,9 +205,10 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
 
   const settings = await tool('settings_get');
   assert.equal(settings.values.minContextTokens, 32768);
+  assert.equal(settings.values.outputTokens, 8192);
   const connection = { url: settings.values.url, allowInsecureLanHttp: false, tokenEnv: null };
   assert.equal((await tool('settings_models', connection)).models[0].name, 'fixture:latest');
-  const values = { ...settings.values, defaultModel: 'fixture:latest', minContextTokens: 65536, defaultMode: 'manual' };
+  const values = { ...settings.values, defaultModel: 'fixture:latest', minContextTokens: 65536, outputTokens: 12288, defaultMode: 'manual' };
   const unsafe = await rpc('tools/call', { name: 'local_settings_save', arguments: {
     revision: settings.revision, values: { ...values, url: 'http://public.example' }
   } });
@@ -224,4 +227,5 @@ test('MCP STDIO: discovery, background task, review, apply and statistics work e
   assert.equal(persisted.workspace, root);
   assert.equal(persisted.models.byTask.writing, 'fixture:latest');
   assert.equal(persisted.limits.minContextTokens, 65536);
+  assert.equal(persisted.limits.outputTokens, 12288);
 });

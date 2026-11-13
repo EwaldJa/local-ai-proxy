@@ -20,7 +20,9 @@ The proxy refuses credentials in the URL and refuses HTTP redirects. The LAN HTT
 
 - `models.default` holds an exact Ollama model name, including its tag. A single compatible model can be selected automatically.
 - `models.byTask` maps task types such as `coding`, `extraction`, or `test_authoring` to model names. A model explicitly requested for a task takes precedence.
-- `models.profiles` maps model names to optional `contextTokens`, `outputTokens`, and `think` settings. The engine caps the requested context at the model's reported limit when available.
+- `models.profiles` maps model names to optional `contextTokens`, `outputTokens`, and `think` settings. The engine caps the requested context at the model's reported limit when available. Thinking uses the model default unless a profile explicitly sets `think`.
+
+The default generation reserve is 8,192 tokens (`limits.outputTokens`). Change **Limite de sortie par réponse** in the panel settings, then reload the plugin. This budget includes thinking and the final response; it is a maximum, not a target length. A per-model `outputTokens` profile remains authoritative. Older explicit limits are preserved until changed in settings. Increasing the context floor alone does not increase this output limit. Truncated responses remain rejected; increase the reserve or split the task rather than accepting partial output.
 - `delegation.defaultMode` defaults to `auto`. Codex delegates suitable work automatically. Use `manual` for delegation only when explicitly requested, or `off` to pause it. Ask Codex to enable or pause delegation to change the mode for one chat.
 - `delegation.workspaceFiles` enables explicit project file reads, writes, and moves under `workspace`. Set it to `false` to send inline context and let Codex handle project files with its normal tools.
 

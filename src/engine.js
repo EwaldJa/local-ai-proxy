@@ -279,7 +279,12 @@ export class Engine {
       await this.artifactWrite(job.id, 'response', response);
       if (controller.signal.aborted) { job.status = 'cancelled'; return; }
       if (response.remote_host || response.remote_model) throw new Error('Unexpected upstream inference reported; result rejected. Verify the Ollama server configuration.');
-      if (response.done_reason === 'length') throw new Error('Output token limit reached; split the task or increase the output reserve.');
+      if (response.done_reason === 'length') {
+        const thinking = response.message?.thinking?.trim();
+        throw new Error(`Output token limit reached (${job.budget.outputTokens} tokens). ${thinking
+          ? 'Thinking output used part of this budget; disable thinking in the model profile or increase its outputTokens reserve.'
+          : 'Split the task or increase the outputTokens reserve.'}`);
+      }
       if (job.usage.inputTokens !== null && job.usage.inputTokens > job.budget.promptBudget) {
         throw new Error('Observed prompt exceeded reserved budget; result rejected. Split task or adjust model profile.');
       }

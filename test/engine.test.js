@@ -204,7 +204,7 @@ test('failed deterministic checks cannot be accepted', async t => {
 });
 
 test('oversize input asks for splitting without a model request', async t => {
-  const f = await fixture(t, proposal(), { models: { profiles: { 'worker:latest': { contextTokens: 8192 } } } });
+  const f = await fixture(t, proposal(), { models: { profiles: { 'worker:latest': { contextTokens: 8192, outputTokens: 2048 } } } });
   const result = await f.submit({ context: 'é'.repeat(5000) });
   assert.equal(result.status, 'needs_split');
   assert.equal(result.budget.maxContextTokens, 8192);
@@ -233,16 +233,17 @@ test('runtime context starts at the configured floor and grows while reserving r
     assert.ok(task.budget.requiredContextTokens <= task.budget.contextTokens);
     assert.ok(task.budget.estimatedInputTokens <= task.budget.promptBudget);
     assert.equal(f.backend.calls[0].contextTokens, task.budget.contextTokens);
+    assert.equal(f.backend.calls[0].outputTokens, 8192);
     windows.push(task.budget.contextTokens);
   }
   assert.equal(windows[0], 32768);
-  assert.equal(windows[1], 16384);
+  assert.equal(windows[1], 24576);
   assert.ok(windows[2] > windows[1]);
   assert.ok(windows[3] > windows[0] && windows[3] <= 65536);
 });
 
 test('adaptive context honors the per-model profile and reported model capacity', async t => {
-  const profiled = await fixture(t, proposal(), { models: { profiles: { 'worker:latest': { contextTokens: 8192 } } } });
+  const profiled = await fixture(t, proposal(), { models: { profiles: { 'worker:latest': { contextTokens: 8192, outputTokens: 2048 } } } });
   const bounded = await profiled.submit({ context: 'x'.repeat(9000) });
   assert.equal(bounded.status, 'needs_split');
   assert.equal(bounded.budget.maxContextTokens, 8192);
@@ -455,13 +456,27 @@ test('rejected proposals cannot be applied, and repeated reviews do not inflate 
   assert.equal(f.engine.stats().rejectedResponses, 1);
 });
 
+test('workers preserve model thinking defaults and honor explicit preferences', async t => {
+  for (const preference of [undefined, true, false, 'low']) {
+    await t.test(`thinking preference ${preference}`, async t => {
+      const profiles = preference === undefined ? {} : { 'worker:latest': { think: preference } };
+      const f = await fixture(t, proposal(), { models: { profiles } });
+      const task = await f.submit();
+      await f.engine.idle();
+      assert.equal(f.backend.calls[0].think, preference);
+      assert.equal(f.engine.task(task).status, 'awaiting_review');
+    });
+  }
+});
+
 test('truncated generation and excess observed context are rejected', async t => {
   const f = await fixture(t);
-  f.backend.generate = async () => ({ done_reason: 'length', message: { content: '{}' }, eval_count: 50 });
+  f.backend.generate = async () => ({ done_reason: 'length', message: { content: '', thinking: 'Synthetic thinking fixture' }, eval_count: 50 });
   const first = await f.submit();
   await f.engine.idle();
   assert.equal(f.engine.task(first).status, 'invalid_response');
   assert.match(f.engine.task(first).error, /Output token limit/);
+  assert.match(f.engine.task(first).error, /Thinking output used part of this budget/);
   f.backend.generate = async input => ({ message: { content: JSON.stringify(proposal()) }, prompt_eval_count: input.contextTokens });
   const second = await f.submit();
   await f.engine.idle();

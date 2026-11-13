@@ -44,6 +44,9 @@ function recentRequests(reader, chatId) {
     return {
       title: titles.get(job.stepId) || job.stepId,
       preview: job.instructionPreview || null,
+      model: job.model || null,
+      // Keep the window requested for this call, independently of later settings.
+      contextTokens: job.budget?.contextTokens ?? job.usage?.requestedContextTokens ?? null,
       status: job.status,
       verdict: job.verdict,
       rejectionReason: await rejectionReason(reader, job),

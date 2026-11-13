@@ -1,6 +1,6 @@
 {
   "name": "local-ai-proxy",
-  "version": "0.3.16",
+  "version": "0.3.18",
   "private": true,
   "author": { "name": "Ewald Janin", "email": "ewald.janin@gmail.com" },
   "license": "SEE LICENSE IN LICENSE",

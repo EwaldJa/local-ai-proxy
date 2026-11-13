@@ -73,7 +73,8 @@
     .request-status[title] { cursor: help; }
     .request[data-verdict="accepted"] .request-status { color: var(--green); }
     .request[data-verdict="rejected"] .request-status { color: var(--red); }
-    .request-preview, .request-metrics { color: var(--muted); font-size: 11px; }
+    .request-preview, .request-metrics, .request-runtime { color: var(--muted); font-size: 11px; }
+    .request-runtime { margin: 3px 0 0; overflow-wrap: anywhere; }
     .request-preview { margin: 2px 0 0; }
     .request-metrics { margin: 3px 0 0; font-variant-numeric: tabular-nums; }
     @media (max-width: 255px) { dl { grid-template-columns: 1fr; } }
@@ -98,6 +99,9 @@
           <label>Modèle par défaut<select id="settings-model"><option value="">Choix automatique si un seul modèle convient</option></select></label>
           <label>Contexte minimal (tokens)<input id="settings-context" type="number" required min="1" step="1" value="32768"></label>
           <p id="settings-profile" class="metric-note" hidden></p>
+          <label>Limite de sortie par réponse (tokens)<input id="settings-output" type="number" required min="1" step="1" value="8192"></label>
+          <p class="metric-note">Budget de génération, raisonnement compris. Le modèle peut s’arrêter avant cette limite.</p>
+          <p id="settings-output-profile" class="metric-note" hidden></p>
           <label>Mode par défaut des chats<select id="settings-mode"><option value="auto">Automatique</option><option value="manual">Manuel</option><option value="off">Désactivé</option></select></label>
           <p class="metric-note">Les modes déjà choisis dans les chats restent prioritaires.</p>
           <button id="settings-save" type="submit" disabled>Enregistrer</button>
@@ -202,6 +206,11 @@
       document.getElementById('settings-lan').checked = values.allowInsecureLanHttp;
       document.getElementById('settings-token').value = values.tokenEnv || '';
       document.getElementById('settings-context').value = values.minContextTokens;
+      document.getElementById('settings-output').value = values.outputTokens ?? 8192;
+      const outputProfile = document.getElementById('settings-output-profile');
+      outputProfile.hidden = !data.fixedModelOutputTokens;
+      outputProfile.textContent = data.fixedModelOutputTokens
+        ? `Le profil du modèle enregistré fixe la sortie à ${number.format(data.fixedModelOutputTokens)} tokens et reste prioritaire.` : '';
       document.getElementById('settings-mode').value = values.defaultMode;
       modelOptions(values.defaultModel);
       document.getElementById('settings-save').disabled = false;
@@ -251,7 +260,8 @@
       settingsAction(async () => {
         const values = { ...connectionValues(), defaultModel: settingsModel.value || null,
           defaultMode: document.getElementById('settings-mode').value,
-          minContextTokens: Number(document.getElementById('settings-context').value) };
+          minContextTokens: Number(document.getElementById('settings-context').value),
+          outputTokens: Number(document.getElementById('settings-output').value) };
         fillSettings(await pluginTool('local_settings_save', { revision: settingsRevision, values }));
         settingsMessage.textContent = 'Réglages enregistrés. Recharge le plugin pour les appliquer.';
       });
@@ -335,6 +345,12 @@
           preview.title = row.preview;
           item.append(preview);
         }
+        const model = typeof row.model === 'string' && row.model ? row.model : '—';
+        const context = Number.isFinite(row.contextTokens) && row.contextTokens > 0
+          ? `${number.format(row.contextTokens)} tokens` : '—';
+        const runtime = requestElement('p', 'request-runtime', `Modèle : ${model}`);
+        runtime.append(document.createElement('br'), `Contexte demandé : ${context}`);
+        item.append(runtime);
         const startedAt = Date.parse(row.startedAt);
         const startTime = Number.isFinite(startedAt) ? clock.format(startedAt) : '—';
         const inputTokens = Number.isFinite(row.inputTokens) ? number.format(row.inputTokens) : '—';
@@ -467,7 +483,7 @@
       }
       try {
         const init = await call('ui/initialize', {
-          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.16' },
+          protocolVersion: '2026-01-26', appInfo: { name: 'Local AI Proxy', version: '0.3.18' },
           appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] }
         });
         bridgeReady = true;

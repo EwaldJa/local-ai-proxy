@@ -47,7 +47,7 @@ export async function resolveConfig(raw, configFile) {
     delegation: { defaultMode: 'auto', workspaceFiles: true, ...raw.delegation },
     // Accept the older contextTokens setting as a floor during migration.
     limits: { minContextTokens: raw.limits?.contextTokens ?? 32768,
-      outputTokens: 2048, contextMarginTokens: 512,
+      outputTokens: 8192, contextMarginTokens: 512,
       maxFileBytes: 1048576, maxResponseBytes: 4194304, ...raw.limits },
     git: { branchPerChat: false, commits: 'manual', ...raw.git }
   };
